@@ -280,4 +280,15 @@ notify
 
 ## **Synchronous waiting**
 
-- ssss
+- If, for some reason, you can't respond asynchronously to the group's completion notification, then you can instead use the wait method on the dispatch group. This is a synchronous method that will block the current queue until all the jobs have finished. It takes an optional parameter which specifies how long to wait for the tasks to complete. If not specified then there is an infinite wait time: 
+
+```swift
+let group = DispatchGroup()
+someQueue.async(group: group) { ... }
+someQueue.async(group: group) { ... }
+someOtherQueue.async(group: group) { ... }
+if group.wait(timeout: .now() + 60) == .timedOut {
+    print("The jobs didn't finish in 60 seconds")
+}
+```
+> Note: Remember, this blocks the current thread; never ever call wait on the main queue.
