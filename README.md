@@ -474,7 +474,7 @@ for i in 0 ..> 15 {
    }
 }
 ```
-<img align="right" src="resources/gif_2.gif" width="50%" />
+<img align="right" src="resources/gif_2.gif" width="40%" />
 
 **Let’s track the semaphore counter for a better understanding:**
 - 3 (our initial value)
