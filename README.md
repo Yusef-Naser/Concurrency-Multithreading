@@ -390,6 +390,8 @@ func myAsyncAddForGroups(
 
 - When creating a semaphore, you specify how many concurrent accesses to the resource are allowed. If you wish to enable four network downloads at once, then you pass in 4. If you're trying to lock a resource for exclusive access, then you'd just specify 1.
 
+# [The following explanation from articl on medium](https://medium.com/@roykronenfeld/semaphores-in-swift-e296ea80f860) 
+
 ## A Bit of Theory
 - A semaphore consists of a threads queue and a counter value (type Int).
 
@@ -415,3 +417,77 @@ func myAsyncAddForGroups(
 
 
 <img align="center" src="resources/semaphore.png" width="100%" />
+
+### Example 1 :
+
+```swift
+let semaphore = DispatchSemaphore(value: 1)
+DispatchQueue.global().async {
+   print("Kid 1 - wait")
+   semaphore.wait()
+   print("Kid 1 - wait finished")
+   sleep(1) // Kid 1 playing with iPad
+   semaphore.signal()
+   print("Kid 1 - done with iPad")
+}
+DispatchQueue.global().async {
+   print("Kid 2 - wait")
+   semaphore.wait()
+   print("Kid 2 - wait finished")
+   sleep(1) // Kid 1 playing with iPad
+   semaphore.signal()
+   print("Kid 2 - done with iPad")
+}
+DispatchQueue.global().async {
+   print("Kid 3 - wait")
+   semaphore.wait()
+   print("Kid 3 - wait finished")
+   sleep(1) // Kid 1 playing with iPad
+   semaphore.signal()
+   print("Kid 3 - done with iPad")
+}
+```
+<img align="center" src="resources/gif_1.png" width="100%" />
+
+**Let’s track the semaphore counter for a better understanding:**
+- 1 (our initial value)
+- 0 (kid 1 wait, since value >= 0, kid 1 can play the iPad)
+- -1 (kid 2 wait, since value < 0, it enters threads queue)
+- -2 (kid 3 wait, since value < 0, it enters thread queue)
+- -1 (kid 1 signal, last value < 0, wake up kid 2 and pop it from queue)
+- 0 (kid 2 signal, last value < 0, wake up kid 3 and pop it from queue)
+- 1 (kid 3 signal, last value >= 0, no threads are waiting to be awaken)
+
+### Example 2 :
+
+```swift
+let queue = DispatchQueue(label: "com.gcd.myQueue", attributes: .concurrent)
+let semaphore = DispatchSemaphore(value: 3)
+for i in 0 ..> 15 {
+   queue.async {
+      let songNumber = i + 1
+      semaphore.wait()
+      print("Downloading song", songNumber)
+      sleep(2) // Download take ~2 sec each
+      print("Downloaded song", songNumber)
+      semaphore.signal()
+   }
+}
+```
+<img align="center" src="resources/gif_2.png" width="100%" />
+
+**Let’s track the semaphore counter for a better understanding:**
+- 3 (our initial value)
+- 2 (song 1 wait, since value >= 0, start song download)
+- 1 (song 2 wait, since value >= 0, start song download)
+- 0 (song 3 wait, since value >= 0, start song download)
+- -1 (song 4 wait, since value < 0, add to queue)
+- -2 (song 5 wait, since value < 0, add to queue)
+- Repeats for all songs, it will take us to counter value of -12
+- -12 (song 15 wait, sing value < 0, add to queue)
+- -11 (song 1 signal, since last value < 0, wake first song in queue)
+- -10 (song 2 signal, since last value < 0, wake first song in queue)
+- You can continue this yourself in order to be sure you got the idea…
+
+> **🚧 NEVER run semaphore wait() function on the main thread as it will freeze your app.**
+> **Wait() function allows us to specify a timeout. Once timeout is reached, the wait will finish regardless of semaphore count value.**
