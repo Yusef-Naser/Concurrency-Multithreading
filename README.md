@@ -414,4 +414,4 @@ func myAsyncAddForGroups(
 3. If the previous value is equal to or bigger than zero, it means the thread queue is empty, aka, no one is waiting.
 
 
-<img  src="resources/semaphore.png" width="20%" />
+<img align="center" src="resources/semaphore.png" width="100%" />
