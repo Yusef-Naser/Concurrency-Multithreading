@@ -447,7 +447,7 @@ DispatchQueue.global().async {
    print("Kid 3 - done with iPad")
 }
 ```
-<img align="center" src="resources/gif_1.png" width="100%" />
+<img align="center" src="resources/gif_1.gif" width="100%" />
 
 **Let’s track the semaphore counter for a better understanding:**
 - 1 (our initial value)
@@ -474,7 +474,7 @@ for i in 0 ..> 15 {
    }
 }
 ```
-<img align="center" src="resources/gif_2.png" width="100%" />
+<img align="center" src="resources/gif_2.gif" width="100%" />
 
 **Let’s track the semaphore counter for a better understanding:**
 - 3 (our initial value)
