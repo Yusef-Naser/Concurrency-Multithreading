@@ -416,7 +416,7 @@ func myAsyncAddForGroups(
 3. If the previous value is equal to or bigger than zero, it means the thread queue is empty, aka, no one is waiting.
 
 
-<img align="center" src="resources/semaphore.png" width="20%" />
+<img align="right" src="resources/semaphore.png" width="20%" />
 
 ### Example 1 :
 
@@ -447,7 +447,7 @@ DispatchQueue.global().async {
    print("Kid 3 - done with iPad")
 }
 ```
-<img align="center" src="resources/gif_1.gif" width="20%" />
+<img align="right" src="resources/gif_1.gif" width="20%" />
 
 **Let’s track the semaphore counter for a better understanding:**
 - 1 (our initial value)
