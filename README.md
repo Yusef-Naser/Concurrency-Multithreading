@@ -292,3 +292,91 @@ if group.wait(timeout: .now() + 60) == .timedOut {
 }
 ```
 > Note: Remember, this blocks the current thread; never ever call wait on the main queue.
+
+> **It's important to know that the jobs will still run, even after the timeout has happened.**
+
+```swift
+let group = DispatchGroup()
+let queue = DispatchQueue.global(qos: .userInitiated)
+queue.async(group: group) {
+print("Start job 1")
+Thread.sleep(until: Date().addingTimeInterval(10))
+    print("End job 1")
+}
+queue.async(group: group) {
+print("Start job 2")
+Thread.sleep(until: Date().addingTimeInterval(2))
+    print("End job 2")
+}
+```
+- It then synchronously waits for the group to complete:
+
+```swift
+if group.wait(timeout: .now() + 5) == .timedOut {
+    print("I got tired of waiting")
+} else {
+    print("All the jobs have completed")
+}
+```
+- When you run the code You'll immediately see messages telling you that jobs 1 and 2 have started. After two seconds, you'll see a message saying job 2 has completed, and then three seconds later a message saying, "I got tired of waiting."
+
+- You can see from the sample that job 2 only sleeps for two seconds and that's why it can complete. You specified five total seconds of time to wait, and that's not enough for job 1 to complete, so the timeout message was printed.
+
+- However, if you wait another five seconds — you've already waited five and job 1 takes ten seconds — you'll see the completion message for job 1.
+
+- At this point, calling a synchronous wait method like this should be a code smell to you, potentially pointing out other issues in your architecture.
+
+## **Wrapping asynchronous methods**
+
+- A dispatch queue natively knows how to work with dispatch groups, and it takes care of signaling to the system that a job has completed for you. In this case, completed means that the code block has run its course. Why does that matter? Because if you call an asynchronous method inside of your closure, then the closure will complete before the internal asynchronous method has completed.
+
+- You've got to somehow tell the task that it's not done until those internal calls have completed as well. In such a case, you can call the provided enter and leave methods on DispatchGroup. Think of them like a simple count of running tasks. Every time you enter, the count goes up by 1. When you leave, the count goes down by 1:
+
+```swift
+
+queue.dispatch(group: group) {
+// count is 1
+group.enter()
+// count is 2
+    someAsyncMethod {
+        defer { group.leave() }
+        // Perform your work here,
+        // count goes back to 1 once complete
+    }
+}
+
+```
+- By calling group.enter(), you let the dispatch group know that there's another block of code running, which should be counted towards the group's overall completion status. You, of course, have to pair that with a corresponding group.leave() call or you'll never be signaled of completion. Because you have to call leave even during error conditions, you will usually want to use a defer statement, as shown above, so that, no matter how you exit the closure, the group.leave() code executes.
+
+- In a simple case similar to the previous code sample, you can simply call the enter / leave pairs directly. If you're going to use someAsyncMethod frequently with dispatch groups, you should wrap the method to ensure you never forget to make the necessary calls:
+
+```swift
+
+func myAsyncAdd(
+lhs: Int,
+rhs: Int,
+completion: @escaping (Int) -> Void) {
+// Lots of cool code here
+completion(lhs + rhs)
+}
+func myAsyncAddForGroups(
+    group: DispatchGroup,
+    lhs: Int,
+    rhs: Int,
+    completion: @escaping (Int) -> Void) {
+    
+    group.enter()
+    myAsyncAdd(first: first, second: second) { result in
+        defer { group.leave() }
+        completion(result)
+    }
+}
+
+```
+
+- The wrapper method takes a parameter for the group that it will count against, and then the rest of the arguments should be exactly the same as that of the method you're wrapping. There's nothing special about wrapping the async method other than being 100% sure that the group enter and leave methods are properly handled.
+
+- If you write a wrapper method, then testing — you do test, right? — is simplified to a single location to validate proper pairing of enter and leave calls in all utilizations.
+
+## **Semaphores**
+
