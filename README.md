@@ -4,6 +4,8 @@
 # GCD & Operations
 - There are two APIs that you'll use when making your app concurrent: Grand Central Dispatch, commonly referred to as GCD, and Operations. These are neither competing technologies nor something that you have to exclusively pick between. In fact, Operations are built on top of GCD!
 
+- **Thread-safe** : code that can be safely called from multiple threads without causing any issues.
+
 ## Grand Central Dispatch
 
 - GCD is Apple's implementation of C's libdispatch library. Its purpose is to queue up tasks — either a method or a closure — that can be run in parallel, depending on availability of resources; it then executes the tasks on an available processor core.
@@ -380,3 +382,36 @@ func myAsyncAddForGroups(
 
 ## **Semaphores**
 
+- There are times when you really need to control how many threads have access to a shared resource. You've already seen the read/write pattern to limit access to a single thread, but there are times when you can allow more resources to be used at once while still maintaining control over the total thread count.
+
+- If you're downloading data from the network, for example, you may wish to limit how many downloads happen at once. You'll use a dispatch queue to offload the work, and you'll use dispatch groups so that you know when all the downloads have completed. However, you only want to allow four downloads to happen at once because you know the data you're getting is quite large and resource-heavy to process.
+
+- By using a DispatchSemaphore, you can handle exactly that use case. Before any desired use of the resource, you simply call the wait method, which is a synchronous function, and your thread will pause execution until the resource is available. If nothing has claimed ownership yet, you immediately get access. If somebody else has it, you'll wait until they signal that they're done with it.
+
+- When creating a semaphore, you specify how many concurrent accesses to the resource are allowed. If you wish to enable four network downloads at once, then you pass in 4. If you're trying to lock a resource for exclusive access, then you'd just specify 1.
+
+## A Bit of Theory
+- A semaphore consists of a threads queue and a counter value (type Int).
+
+**The threads queue**
+- is used by the semaphore to keep track of waiting threads in FIFO order (The first thread entered into the queue will be the first to get access to the shared resource once it is available).
+
+**The counter value**
+- is used by the semaphore to decide if a thread should get access to a shared resource or not. The counter value changes when we call signal() or wait() function.
+
+### So, when should we call wait() and signal() functions?
+- Call wait() each time before using the shared resource. We are basically asking the semaphore if the shared resource is available or not. If not, we will wait.
+- Call signal() each time after using the shared resource. We are basically signaling the semaphore that we are done interacting with the shared resource.
+
+### Calling wait() will do the following:
+1. Decrement semaphore counter by 1.
+2. If the resulting value is less than zero, the thread is frozen.
+3. If the resulting value is equal to or bigger than zero, the code will get executed without waiting.
+
+### Calling signal() will do the following:
+1. Increment semaphore counter by 1.
+2. If the previous value was less than zero, this function wakes the oldest thread currently waiting in the thread queue.
+3. If the previous value is equal to or bigger than zero, it means the thread queue is empty, aka, no one is waiting.
+
+
+<img align="right" src="resources/semaphore.png" width="20%" />

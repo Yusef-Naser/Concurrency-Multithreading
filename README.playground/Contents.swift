@@ -58,34 +58,54 @@ import Foundation
 //    print("second")
 //}
 
+//let group = DispatchGroup()
+//
+//DispatchQueue.main.async(group: group ) {
+//    print("main_1")
+//}
+//
+//DispatchQueue.main.async(group: group ) {
+//    print("main_2")
+//}
+//
+//DispatchQueue.global().async(group: group )  {
+//    print("global_1")
+//    sleep(2)
+//}
+//
+//DispatchQueue.main.async(group: group ) {
+//    print("main_3")
+//}
+//
+//
+//print("first print")
+//
+//
+//group.notify(queue: DispatchQueue.main) {
+//    print("notify")
+//}
+//
+//DispatchQueue.global().async(group: group )  {
+//    print("global_2")
+//    sleep(2)
+//}
+
+let queue = DispatchQueue(label: "label", qos: .utility , attributes: .concurrent )
 let group = DispatchGroup()
+let semaphore = DispatchSemaphore(value: 4)
 
-DispatchQueue.main.async(group: group ) {
-    print("main_1")
-}
-
-DispatchQueue.main.async(group: group ) {
-    print("main_2")
-}
-
-DispatchQueue.global().async(group: group )  {
-    print("global_1")
-    sleep(2)
-}
-
-DispatchQueue.main.async(group: group ) {
-    print("main_3")
-}
-
-
-print("first print")
-
-
-group.notify(queue: DispatchQueue.main) {
-    print("notify")
-}
-
-DispatchQueue.global().async(group: group )  {
-    print("global_2")
-    sleep(2)
+for i in 1...10 {
+    queue.async(group: group) {
+        semaphore.wait()
+        defer {
+            group.leave()
+            semaphore.signal()
+            print("end closure")
+        }
+        print("Downloading image \(i)")
+        // Simulate a network wait
+        Thread.sleep(forTimeInterval: 3)
+        print("---------------")
+        print("Downloaded image \(i)")
+    }
 }
