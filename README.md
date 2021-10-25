@@ -491,3 +491,14 @@ for i in 0 ..> 15 {
 
 > **🚧 NEVER run semaphore wait() function on the main thread as it will freeze your app.**
 > **Wait() function allows us to specify a timeout. Once timeout is reached, the wait will finish regardless of semaphore count value.**
+
+
+# Concurrency Problems
+
+## Race conditions
+
+## Thread barrier
+
+## Deadlock
+
+## Priority inversion
