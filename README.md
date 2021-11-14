@@ -502,3 +502,80 @@ for i in 0 ..> 15 {
 ## Deadlock
 
 ## Priority inversion
+
+
+# Operation 
+- One of the first reasons you'll likely want to create an Operation is for reusability. If you've got a simple "fire and forget" task, then GCD is likely all you'll need. An Operation is an actual Swift object, meaning you can pass inputs to set up the task, implement helper methods, etc. Thus, you can wrap up a unit of work, or task, and execute it sometime in the future, and then easily submit that unit of work more than once.
+
+## Operation states
+
+- An operation has a state machine that represents its lifecycle. There are several possible states that occur at various parts of this lifecycle:
+1.  When it's been instantiated and is ready to run, it will transition to the isReady state.
+2.  At some point, you may invoke the start method, at which point it will move to the isExecuting state.
+3. If the app calls the cancel method, then it will transition to the isCancelled state before moving onto the isFinished state.
+4. If it's not canceled, then it will move directly from isExecuting to isFinished.
+
+- Operation --> isReady --> isExeuting --> isCancelled
+                                                               |
+                                                               |--> isFinished 
+                                                               
+- Each of the aforementioned states are read-only Boolean properties on the Operation class. You can query them at any point during the execution of the task to see whether or not the task is executing.
+
+- The Operation class handles all of these state transitions for you. The only two you can directly influence are the isExecuting state, by starting the operation, and the isCancelled state, if you call the cancel method on the object.
+
+
+## Block Operation
+
+```swift
+let operation = BlockOperation {
+    print("2 + 3 = 5")
+}
+```
+
+- A BlockOperation manages the concurrent execution of one or more closures on the default global queue. This provides an object-oriented wrapper for apps that are already using an OperationQueue (discussed in the next chapter) and don't want to create a separate DispatchQueue as well.
+
+- Being an Operation, it can take advantage of KVO (Key-Value Observing) notifications, dependencies and everything else that an Operation provides.
+
+- What's not immediately apparent from the name of the class is that BlockOperation manages a group of closures. It acts similar to a dispatch group in that it marks itself as being finished when all of the closures have finished. The example above shows adding a single closure to the operation. You can, however, add multiple items, as you'll see in a moment.
+
+> Note: Tasks in a BlockOperation run concurrently. If you need them to run
+serially, submit them to a private DispatchQueue or set up dependencies.
+
+## Multiple block operations
+
+```swift
+let sentence = "Ray's courses are the best!"
+let wordOperation = BlockOperation()
+for word in sentence.split(separator: " ") {
+    wordOperation.addExecutionBlock {
+        print(word)
+    }
+}
+wordOperation.start()
+```
+- The sentence is printed to the console, one word per line, but the order is jumbled. Remember that a BlockOperation runs concurrently, not serially, and thus the order of execution is not deterministic.
+
+```swift
+let sentence = "Ray's courses are the best!"
+let wordOperation = BlockOperation()
+for word in sentence.split(separator: " ") {
+    wordOperation.addExecutionBlock {
+        print(word)
+        sleep(2)
+    }
+}
+wordOperation.start()
+```
+
+- each operation sleeps for two seconds, the total time of the operation itself is just over two seconds, not 10 seconds (five prints times two seconds each).
+
+- If you provide a completionBlock closure, then it will be executed once all of the closures added to the block operation have finished. Add this code to your playground, before you call duration, and run it again to see the results:
+
+```swift
+wordOperation.completionBlock = {
+    print("Thank you for your patronage!")
+}
+```
+## Subclassing operation
+- The BlockOperation class is great for simple tasks but if performing more complex work, or for reusable components, you'll want to subclass Operation yourself.
+
