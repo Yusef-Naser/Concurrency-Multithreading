@@ -579,3 +579,44 @@ wordOperation.completionBlock = {
 ## Subclassing operation
 - The BlockOperation class is great for simple tasks but if performing more complex work, or for reusable components, you'll want to subclass Operation yourself.
 
+
+# Operation Queues
+
+-The real power of operations begins to appear when you let an OperationQueue handle your operations. Just like with GCD's DispatchQueue, the OperationQueue class is what you use to manage the scheduling of an Operation and the maximum number of operations that can run simultaneously. OperationQueue allows you to add work in three separate ways:
+• Pass an Operation.
+• Pass a closure.
+• Pass an array of Operations.
+
+- block operations is a synchronous task. While you could dispatch it asynchronously to a GCD queue to move it off the main thread, you’ll want, instead, to add it to an OperationQueue to gain the full concurrency benefits of operations.
+
+## OperationQueue management
+
+- The operation queue executes operations that are ready, according to quality of service values and any dependencies the operation has. Once you’ve added an Operation to the queue, it will run until it has completed or been canceled. you’ll learn about dependencies and canceling operations in future chapters.
+
+- Once you’ve added an Operation to an OperationQueue, you can't add that same Operation to any other OperationQueue. Operation instances are once and done tasks, which is why you make them into subclasses so that you can execute them multiple times, if necessary.
+
+## Waiting for completion
+- If you look under the hood of OperationQueue, you’ll notice a method called waitUntilAllOperationsAreFinished. It does exactly what its name suggests: Whenever you find yourself wanting to call that method, in your head, replace the word wait with block in the method name. Calling it blocks the current thread, meaning that you must never call this method on the main UI thread.
+
+- If you find yourself needing this method, then you should set up a private serial DispatchQueue wherein you can safely call this blocking method. If you don't need to wait for all operations to complete, but just a set of operations, then you can, instead, use the addOperations(_:waitUntilFinished:) method on OperationQueue.
+
+## Quality of service
+
+- An OperationQueue behaves like a DispatchGroup in that you can add operations with different quality of service values and they'll run according to the corresponding priority. If you need a refresher on the different quality of service levels, refer back to Chapter 3, "Queues & Threads."
+
+- The default quality of service level of an operation queue is .background. While you can set the qualityOfService property on the operation queue, keep in mind that it might be overridden by the quality of service that you’ve set on the individual operations managed by the queue.
+
+## Pausing the queue
+
+- You can pause the dispatch queue by setting the isSuspended property to true. In-flight operations will continue to run but newly added operations will not be scheduled until you change isSuspended back to false.
+
+## Maximum number of operations
+- Sometimes you’ll want to limit the number of operations which are running at a single time. By default, the dispatch queue will run as many jobs as your device is capable of handling at once. If you wish to limit that number, simply set the maxConcurrentOperationCount property on the dispatch queue. If you set the maxConcurrentOperationCount to 1, then you’ve effectively created a serial queue.
+
+## Underlying DispatchQueue
+- Before you add any operations to an OperationQueue, you can specify an existing DispatchQueue as the underlyingQueue. If you do so, keep in mind that the quality of service of the dispatch queue will override any value you set for the operation queue's quality of service.
+
+> Note: Do not specify the main queue as the underlying queue!
+
+# Asynchronous Operations
+
