@@ -620,3 +620,249 @@ wordOperation.completionBlock = {
 
 # Asynchronous Operations
 
+-Up to this point, your operations have been synchronous, which works very well with the Operation class' state machine. When the operation transitions to the isReady state, the system knows that it can start searching for an available thread.
+
+- Once the scheduler has found a thread on which to run the operation, the operation will transition to the isExecuting state. At that point, your code executes and completes, and the state then becomes isFinished.
+
+- How would that work with an asynchronous operation, though? When the main method of the operation executes, it will kick off your asynchronous task, and then main exits. The state of the operation can't switch to isFinished at that point because the asynchronous method likely has yet to complete.
+
+- It's possible to wrap an asynchronous method into an operation, but it takes a bit morework on your part. You'll need to manage the state changes manually as the operationcan't determine automatically when the task has finished executing. To make matters worse, the state properties are all read-only!
+
+**State tracking**
+- Since the state of an operation is read-only, you'll first want to give yourself a way to track changes in a read-write manner, so create a State enumeration at the top of the file:
+```swift
+extension AsyncOperation {
+    enum State: String {
+        case ready, executing, finished
+            fileprivate var keyPath: String {   
+                return "is\(rawValue.capitalized)"
+                }
+    }
+}
+```
+- the Operation class uses KVO notifications. When the isExecuting state changes, for example, a KVO notification will be sent. The states you set yourself don't start with the 'is' prefix though, and, per the Swift style guide, enum entries should be lowercased.
+
+- The keyPath computed property you wrote is what helps support the aforementioned KVO notifications. When you ask for the keyPath of your current State, it will capitalize the first letter of the state's value and prefix with the text is. Thus, when your state is set to executing, the keyPath will return isExecuting, which matches the property on the Operation base class.
+
+- Now that you have the type of your state created, you'll need a variable to hold the state. Because you need to send the appropriate KVO notifications when you change the value, you'll attach property observers to the property. Add the following code to the AsyncOperation class, under // Create state management:
+
+```swift
+var state = State.ready {
+    willSet {
+        willChangeValue(forKey: newValue.keyPath)
+        willChangeValue(forKey: state.keyPath)
+    }
+    didSet {
+        didChangeValue(forKey: oldValue.keyPath)
+        didChangeValue(forKey: state.keyPath)
+    }
+}
+```
+- By default, your state is ready. When you change the value of state, you'll actually end up sending four KVO notifications! Take a minute to see if you can understand what is happening and why there are four entries there instead of just two.
+
+- Consider the case in which the state is currently ready and you are updating to executing. isReady will become false, while isExecuting will become true. These four KVO notifications will be sent:
+1. Will change for isReady.
+2. Will change for isExecuting.
+3. Did change for isReady.
+4. Did change for isExecuting.
+- The Operation base class needs to know that both the isExecuting and isReady properties are changing.
+
+**Base properties**
+- Now that you have a way to track state changes and signal that a change was in fact performed, you'll need to override the base class' instances of those methods to use your state instead. Add these three overrides to the class, below // Override properties:
+
+```swift
+override var isReady: Bool {
+    return super.isReady && state == .ready
+}
+override var isExecuting: Bool {
+    return state == .executing
+}
+override var isFinished: Bool {
+    return state == .finished
+}
+```
+> Note: It's critical that you include a check to the base class' isReady method as your code isn't aware of everything that goes on while the scheduler determines whether or not it is ready to find your operation a thread to use.
+
+- The final property to override is simply to specify that you are in fact using an asynchronous operation. Add the following piece of code:
+
+```swift
+override var isAsynchronous: Bool {
+    return true
+}
+```
+**Starting the operation**
+- All that's left to do is implement the start method. Whether you manually execute an operation or let the operation queue do it for you, the start method is what gets called first, and then it is responsible for calling main. Add the following code immediately below // Override start:
+
+```swift
+override func start() {
+    main()
+    state = .executing
+}
+```
+
+>Note: Notice this code doesn't invoke super.start(). The official documentation (https://apple.co/2YcJvEh) clearly mentions that you must not call super at any time when overriding start.
+
+- Those two lines probably look backwards to you. They're really not. Because you're performing an asynchronous task, the main method is going to almost immediately return, thus you have to manually put the state back to .executing so the operation knows it is still in progress.
+
+>Note: There's a piece missing from the above code. "Canceling Operations," will talk about cancelable operations, and that code needs to be in any start method. It's left out here to avoid confusion.
+
+- If Swift had a concept of an abstract class, which couldn't be directly instantiated, you would mark this class as abstract. In other words, never directly use this class. You should always subclass AsyncOperation!
+
+# in the book Concurrency 
+## Networked TiltShift
+## NetworkImageOperation
+
+# Operation Dependencies
+- You're going to learn about dependencies between operations. Making one operation dependent on another provides two specific benefits for the interactions between operations:
+
+1. Ensures that the dependent operation does not begin before the prerequisite operation has completed.
+2. Provides a clean way to pass data from the first operation to the second operation automatically.
+
+- Enabling dependencies between operations is one of the primary reasons you'll find yourself choosing to use an Operation over GCD.
+
+## Modular design
+- Consider the tilt shift project you've been creating. You now have an operation that will download from the network, as well as an operation that will perform the tilt shift. You could instead create a single operation that performs both tasks, but that's not a good architectural design.
+
+- Classes should ideally perform a single task, enabling reuse within and across projects. If you had built the networking code into the tilt shift operation directly, then it wouldn't be usable for an already-bundled image. While you could add many initialization parameters specifying whether or not the image would be provided or downloaded from the network, that bloats the class. Not only does it increase the longterm maintenance of the class — imagine switching from URLSession to Alamofire — it also increases the number of test cases which have to be designed.
+
+## Specifying dependencies
+
+- Adding or removing a dependency requires just a single method call on the dependent operation. Consider a fictitious example in which you'd download an image, decrypt it and then run the resultant image through a tilt shift:
+
+```swift
+let networkOp = NetworkImageOperation()
+let decryptOp = DecryptOperation()
+let tiltShiftOp = TiltShiftOperation()
+decryptOp.addDependency(op: networkOp)
+tiltShiftOp.addDependency(op: decryptOp)
+```
+- If you needed to remove a dependency for some reason, you'd simply call the obviously named method, removeDependency(op:):
+```swift
+tiltShiftOp.removeDependency(op: decryptOp)
+```
+- The Operation class also provides a read-only property, dependencies, which will return an array of Operations, which are marked as dependencies for the given operation.
+
+## Avoiding the pyramid of doom
+- Dependencies have the added side effect of making the code much simpler to read. If you tried to write three chained operations together using GCD, you'd end up with a pyramid of doom. Consider the following pseudo-code for how you might have to represent the previous example with GCD:
+
+```swift
+let network = NetworkClass()
+network.onDownloaded { raw in
+    guard let raw = raw else { return }
+    let decrypt = DecryptClass(raw)
+    decrypt.onDecrypted { decrypted in
+        guard let decrypted = decrypted else { return }
+        let tilt = TiltShiftClass(decrypted)
+        tilt.onTiltShifted { tilted in
+            guard let tilted = tilted else { return }
+        }
+    }
+}
+```
+
+- Which one is going to be easier to understand and maintain for the junior developer who takes over your project once you move on to bigger and better things? Consider also that the example provided doesn't take into account the retain cycles or error checking that real code would have to handle properly.
+
+# Watch out for deadlock
+- Any time a task is dependent on another, you introduce the possibility of deadlock, if you aren't careful. Picture in your mind — better yet graph out — the dependency chain. If the graph draws a straight line, then there's no possibility of deadlock.
+
+<img src="resources/deadlock.tiff" width="50%" />
+
+- It's completely valid to have the operations from one operation queue depend on an operation from another operation queue. Even when you do that, as long as there are no loops, you're still safe from deadlock.
+
+<img src="resources/deadlock_2.tiff" width="50%" />
+
+- If, however, you start seeing loops, you've almost certainly run into a deadlock situation.
+
+<img src="resources/deadlock_3.tiff" width="50%" />
+
+- In the previous image, you can see where the problem lies:
+1. Operation 2 can't start until operation 5 is done.
+2. Operation 5 can't start until operation 3 is done.
+3. Operation 3 can't start until operation 2 is done.
+
+- If you start and end with the same operation number in a cycle, you've hit deadlock. None of the operations will ever be executed. There's no silver-bullet solution to resolve a deadlock situation, and they can be hard to find if you don't map out your dependencies. If you run into such a situation, you have no choice but to re-architect the solution you've designed.
+
+## Passing data between operations
+## Using protocols
+
+- Here's what you're really saying: "When this operation finishes, if everything went well, I will provide you with an image of type UIImage."
+
+```swift
+import UIKit
+protocol ImageDataProvider {
+    var image: UIImage? { get }
+}
+```
+- Any operation that has an output of a UIImage should implement that protocol. In this case, the property names match one-to-one, which makes life easier. Think about your TiltShiftOperation, though. Following CIFilter naming conventions you called that one outputImage. Both classes should conform to the ImageDataProvider.
+
+
+# Canceling operation
+- While dependencies are the killer feature of operations, there's one more feature that's not available to Grand Central Dispatch. With an operation, you have the capability of canceling a running operation as long as it's written properly. This is very useful for long operations that can become irrelevant over time. For instance, the user might leave the screen or scroll away from a cell in a table view. There's no sense in continuing to load data or make complex calculations if the user isn't going to see the result.
+
+## The magic of cancel
+- Once you schedule an operation into an operation queue, you no longer have any control over it. The queue will schedule and manage the operation from then on. The one and only change you can make, once it's been added to the queue, is to call thecancel method of Operation.
+
+- There's nothing magical about how canceling an operation works. If you send a request to an operation to stop running, then the isCancelled computed property will return true. Nothing else happens automatically! At first, it may seem strange that iOS doesn't stop the operation automatically, but it's really not.
+
+
+<img src="resources/cancelOpreration.tiff" width="50%" />
+
+- There's nothing magical about how canceling an operation works. If you send a request to an operation to stop running, then the isCancelled computed property will return true. Nothing else happens automatically! At first, it may seem strange that iOS doesn't stop the operation automatically, but it's really not.
+1. What does canceling an operation mean to the OS?
+2. Should the operation simply throw an exception?
+3. Is there cleanup that needs to take place?
+4. Can a running network call be canceled?
+5. Is there a message to send server-side to let something else know the task stopped?
+6. If the operation stops, will data be corrupted?
+
+- With just the small list of issues presented in the bullets above, you can see why setting a flag identifying that cancellation has been requested is all that's possible automatically.
+
+ - The default start implementation of Operation will first check to see whether the isCancelled flag is true, and exit immediately if it is.
+
+- **Cancel and cancelAllOperations**
+
+- The interface to cancel an operation is quite simple. If you just want to cancel a specific Operation, then you can call the cancel method. If, on the other hand, you wish to cancel all operations that are in an operation queue, then you should call the cancelAllOperations method defined on OperationQueue.
+
+- **Updating AsyncOperation**
+
+- In this chapter, you'll update the app you've been working on so that a cell's operations are canceled when the user scrolls away from that cell.
+ - In Chapter 8, "Asynchronous Operations," you built the AsyncOperation base class. If you recall, there was a note with that code warning you that the provided implementation wasn't entirely complete. It's time to fix that!
+
+- The start class provided was written like so:
+```swift
+override func start() {
+    main()
+    state = .executing
+}
+```
+- If you're going to allow your operation to be cancelable — which you should always do unless you have a very good reason not to — then you need to check the isCancelled variable at appropriate locations
+
+```swift
+
+override func start() {
+    if isCancelled {
+        state = .finished
+        return
+    }
+    main()
+    state = .executing
+}
+
+```
+
+- And then override the cancel method:
+
+```swift
+override func cancel() {
+    state = .finished
+}
+```
+- You're probably thinking, "But cancel is already part of the base class," and you'd be right. However, the base class doesn't know anything about the states that you defined and thus you need to update the proper property.
+
+- It's important that when an operation is canceled, the isExecuting property becomes false and the isFinished property becomes true. Your base class now handles those requirements by evaluating the state property appropriately. After the above changes, it's now possible for your operation to be canceled before it's started.
+
+### Canceling a running operation
+
+# [Core Data](https://www.raywenderlich.com/books/concurrency-by-tutorials/v2.0/chapters/11-core-data) 
+
+# [Thread Sanitizer](https://www.raywenderlich.com/books/concurrency-by-tutorials/v2.0/chapters/12-thread-sanitizer)
