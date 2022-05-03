@@ -866,3 +866,8 @@ override func cancel() {
 # [Core Data](https://www.raywenderlich.com/books/concurrency-by-tutorials/v2.0/chapters/11-core-data) 
 
 # [Thread Sanitizer](https://www.raywenderlich.com/books/concurrency-by-tutorials/v2.0/chapters/12-thread-sanitizer)
+
+
+# [Async await in Swift and more] (https://www.avanderlee.com/swift/async-await/)
+# [TaskConcurrencyManifesto](https://gist.github.com/lattner/31ed37682ef1576b16bca1432ea9f782#part-1-asyncawait-beautiful-asynchronous-apis)
+
